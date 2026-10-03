@@ -1,15 +1,16 @@
 [Unit]
 Description=NTP-synchronized Time API
 Wants=network-online.target
-After=network-online.target
+Requires=chrony.service
+After=network-online.target chrony.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/timeapi
 Environment=LISTEN_ADDR=0.0.0.0:3123
-Environment=NTP_SERVERS=0.europe.pool.ntp.org:123,1.europe.pool.ntp.org:123,2.europe.pool.ntp.org:123
-Environment=NTP_POLL_SECONDS=64
+Environment=NTP_SERVERS=127.0.0.1:123
+Environment=NTP_POLL_SECONDS=2
 Environment=NTP_MAX_AGE_SECONDS=300
 Restart=always
 RestartSec=5
