@@ -1,0 +1,32 @@
+[Unit]
+Description=NTP-synchronized Time API
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/timeapi
+Environment=LISTEN_ADDR=0.0.0.0:3123
+Environment=NTP_SERVERS=0.europe.pool.ntp.org:123,1.europe.pool.ntp.org:123,2.europe.pool.ntp.org:123
+Environment=NTP_POLL_SECONDS=64
+Environment=NTP_MAX_AGE_SECONDS=300
+Restart=always
+RestartSec=5
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

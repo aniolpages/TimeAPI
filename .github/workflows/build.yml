@@ -1,0 +1,43 @@
+name: Debian x64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - name: Check
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+      - name: Build
+        run: cargo build --locked --release --target x86_64-unknown-linux-musl
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/timeapi dist/timeapi
+          cp timeapi.service Caddyfile dist/
+          cd dist
+          sha256sum timeapi > SHA256SUMS
+          tar -czf timeapi-debian-x64.tar.gz timeapi timeapi.service Caddyfile SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: timeapi-debian-x64
+          path: dist/timeapi-debian-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
