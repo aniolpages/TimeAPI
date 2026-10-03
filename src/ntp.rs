@@ -36,7 +36,12 @@ fn decode_timestamp(bytes: &[u8], near_unix: f64) -> f64 {
     seconds + era * ERA + fraction - EPOCH
 }
 
-fn decode_response(packet: &[u8], origin: &[u8; 8], t1: f64, t4: f64) -> io::Result<(f64, f64, f64)> {
+fn decode_response(
+    packet: &[u8],
+    origin: &[u8; 8],
+    t1: f64,
+    t4: f64,
+) -> io::Result<(f64, f64, f64)> {
     if packet.len() < 48 {
         return Err(invalid("truncated NTP response"));
     }
@@ -67,7 +72,11 @@ fn decode_response(packet: &[u8], origin: &[u8; 8], t1: f64, t4: f64) -> io::Res
     if uncertainty > 1.0 {
         return Err(invalid("NTP uncertainty exceeds one second"));
     }
-    Ok(((t4 + offset) * 1000.0, delay.max(0.0) * 1000.0, uncertainty * 1000.0))
+    Ok((
+        (t4 + offset) * 1000.0,
+        delay.max(0.0) * 1000.0,
+        uncertainty * 1000.0,
+    ))
 }
 
 pub async fn query(server: &str) -> io::Result<Sample> {
@@ -75,12 +84,18 @@ pub async fn query(server: &str) -> io::Result<Sample> {
         let addresses: Vec<_> = lookup_host(server).await?.collect();
         let mut last_error = io::Error::new(ErrorKind::NotFound, "no NTP addresses");
         for address in addresses.into_iter().take(3) {
-            let bind = if address.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+            let bind = if address.is_ipv4() {
+                "0.0.0.0:0"
+            } else {
+                "[::]:0"
+            };
             let result = async {
                 let socket = UdpSocket::bind(bind).await?;
                 socket.connect(address).await?;
-                let t1 = SystemTime::now().duration_since(UNIX_EPOCH)
-                    .map_err(|_| invalid("local clock predates Unix epoch"))?.as_secs_f64();
+                let t1 = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| invalid("local clock predates Unix epoch"))?
+                    .as_secs_f64();
                 let sent = Instant::now();
                 let origin = encode_timestamp(t1);
                 let mut request = [0; 48];
@@ -88,19 +103,29 @@ pub async fn query(server: &str) -> io::Result<Sample> {
                 request[40..48].copy_from_slice(&origin);
                 socket.send(&request).await?;
                 let mut packet = [0; 512];
-                let length = timeout(Duration::from_millis(800), socket.recv(&mut packet)).await??;
+                let length =
+                    timeout(Duration::from_millis(800), socket.recv(&mut packet)).await??;
                 let received = Instant::now();
                 let t4 = t1 + received.duration_since(sent).as_secs_f64();
-                let (unix_ms, delay_ms, uncertainty_ms) = decode_response(&packet[..length], &origin, t1, t4)?;
-                Ok(Sample { unix_ms, received, delay_ms, uncertainty_ms, server: server.to_owned() })
-            }.await;
+                let (unix_ms, delay_ms, uncertainty_ms) =
+                    decode_response(&packet[..length], &origin, t1, t4)?;
+                Ok(Sample {
+                    unix_ms,
+                    received,
+                    delay_ms,
+                    uncertainty_ms,
+                    server: server.to_owned(),
+                })
+            }
+            .await;
             match result {
                 Ok(sample) => return Ok(sample),
                 Err(error) => last_error = error,
             }
         }
         Err(last_error)
-    }).await?
+    })
+    .await?
 }
 
 #[cfg(test)]
@@ -121,7 +146,8 @@ mod tests {
     fn four_timestamp_offset_accounts_for_server_processing() {
         let t1 = 1_790_990_000.0;
         let packet = response(t1, t1 + 0.030, t1 + 0.032);
-        let (unix, delay, uncertainty) = decode_response(&packet, &encode_timestamp(t1), t1, t1 + 0.042).unwrap();
+        let (unix, delay, uncertainty) =
+            decode_response(&packet, &encode_timestamp(t1), t1, t1 + 0.042).unwrap();
         assert!((unix - (t1 + 0.052) * 1000.0).abs() < 0.001);
         assert!((delay - 40.0).abs() < 0.001);
         assert!((uncertainty - 20.0).abs() < 0.001);
@@ -160,7 +186,9 @@ mod tests {
             socket.send_to(&packet, peer).await.unwrap();
         });
         let sample = query(&address.to_string()).await.unwrap();
-        assert!(sample.uncertainty_ms < 10.0);
+        assert_eq!(sample.server, address.to_string());
+        assert!(sample.delay_ms.is_finite() && sample.delay_ms >= 0.0);
+        assert!((sample.uncertainty_ms - sample.delay_ms / 2.0).abs() < 0.001);
         assert!(sample.unix_ms.is_finite());
         server.await.unwrap();
     }
