@@ -1,5 +1,0 @@
-time.aniol.cloud {
-	reverse_proxy 127.0.0.1:3123 {
-		flush_interval -1
-	}
-}
